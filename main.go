@@ -54,6 +54,9 @@ func main() {
 	// Input file flag
 	var inputFile string
 	flag.StringVar(&inputFile, "i", "-", "Input file (default is stdin)")
+
+	var sameLinePorts bool
+	flag.BoolVar(&sameLinePorts, "l", false, "Use ports in the same line (google.com,2087,2086)")
 	flag.Parse()
 
 	timeout = time.Duration(to) * time.Second
@@ -95,6 +98,23 @@ func main() {
 		if domain == "" {
 			continue
 		}
+
+		if sameLinePorts {
+			lineArgs := strings.Split(domain, ",")
+			if len(lineArgs) < 2 {
+				continue
+			}
+			d, ports := lineArgs[0], lineArgs[1:]
+			for _, port := range ports {
+				if port := strings.TrimSpace(port); port != "" {
+					wg.Add(2)
+					_ = pool.Invoke(fmt.Sprintf("http://%s:%s", d, port))
+					_ = pool.Invoke(fmt.Sprintf("https://%s:%s", d, port))
+				}
+			}
+			continue
+		}
+
 		if !skipDefault {
 			wg.Add(2)
 			_ = pool.Invoke("http://" + domain)

@@ -40,6 +40,21 @@ File input
 ❯ cat domains.txt | fprobe -c 200
 ```
 
+### Use inline ports
+If you want to use special ports for each domain, you can use the `-l` flag. You can parse Nmap/Masscan output and reformat it to use this feature.
+
+**Input (domains.txt)**
+```
+google.com,2087,2086,8880,2082,443,80,2052,2096,2083,8080,8443,2095,2053
+yahoo.com,2087,2086,8880,2082,443,80,2052,2096,2083,8080,8443,2095,2053
+sport.yahoo.com,2086,443,2096,2053,8080,2082,80,2083,8443,2052,2087,2095,8880
+```
+
+**Command**
+```
+❯ cat domains.txt | fprobe -l
+```
+
 ### Timeout
 ```
 ❯ cat domains.txt | fprobe -t 10
@@ -60,7 +75,7 @@ File input
 ```
 
 ### Skip default probes
-If you don't want to probe for HTTP on port 80 or HTTPS on port 443, you can use the -s flag.
+If you don't want to probe for HTTP on port 80 or HTTPS on port 443, you can use the `-s` flag.
 ```
 ❯ cat domains.txt | fprobe -s
 ```
