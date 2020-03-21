@@ -136,9 +136,11 @@ func main() {
 func initClient() {
 	client = &fasthttp.Client{
 		NoDefaultUserAgentHeader: true,
-		TLSConfig:                &tls.Config{InsecureSkipVerify: true},
-		ReadTimeout:              time.Second,
-		WriteTimeout:             time.Second,
+		TLSConfig: &tls.Config{
+			InsecureSkipVerify: true,
+			Renegotiation:      tls.RenegotiateOnceAsClient}, // For "local error: tls: no renegotiation"
+		ReadTimeout:  time.Second,
+		WriteTimeout: time.Second,
 	}
 }
 
