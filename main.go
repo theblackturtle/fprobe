@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+const AUTHOR = "@blackturtle - github.com/theblackturtle"
+
 var (
 	client    *fasthttp.Client
 	errorPool sync.Pool
