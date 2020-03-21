@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const AUTHOR = "@blackturtle - github.com/theblackturtle"
+const AUTHOR = "@thebl4ckturtle - github.com/theblackturtle"
 
 var (
 	client    *fasthttp.Client
