@@ -17,6 +17,7 @@ Usage of fprobe:
         Concurrency (default 50)
   -i string
         Input file (default is stdin) (default "-")
+  -l    Use ports in the same line (google.com,2087,2086)
   -p value
         add additional probe (proto:port)
   -s    skip the default probes (http:80 and https:443)
