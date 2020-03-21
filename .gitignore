@@ -2,3 +2,4 @@ fprobe
 .idea/
 .vscode/
 dist/
+*.txt

@@ -161,8 +161,6 @@ func initClient() {
 		TLSConfig: &tls.Config{
 			InsecureSkipVerify: true,
 			Renegotiation:      tls.RenegotiateOnceAsClient}, // For "local error: tls: no renegotiation"
-		ReadTimeout:  time.Second,
-		WriteTimeout: time.Second,
 	}
 }
 
