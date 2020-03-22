@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/panjf2000/ants"
 	"github.com/valyala/fasthttp"
+	"net"
 	"os"
 	"strings"
 	"sync"
@@ -122,6 +123,7 @@ func main() {
 			_ = pool.Invoke("http://" + domain)
 			_ = pool.Invoke("https://" + domain)
 		}
+
 		for _, p := range probes {
 			switch p {
 			case "medium":
@@ -158,17 +160,23 @@ func main() {
 func initClient() {
 	client = &fasthttp.Client{
 		NoDefaultUserAgentHeader: true,
+		ReadTimeout:              time.Second,
+		WriteTimeout:             time.Second,
+		Dial: func(addr string) (net.Conn, error) {
+			return fasthttp.DialTimeout(addr, 15*time.Second)
+		},
 		TLSConfig: &tls.Config{
 			InsecureSkipVerify: true,
-			Renegotiation:      tls.RenegotiateOnceAsClient}, // For "local error: tls: no renegotiation"
+			Renegotiation:      tls.RenegotiateOnceAsClient, // For "local error: tls: no renegotiation"
+		},
 	}
 }
 
 func isWorking(url string) (bool, error) {
 	req := fasthttp.AcquireRequest()
 	defer fasthttp.ReleaseRequest(req)
-	req.SetConnectionClose()
 	req.SetRequestURI(url)
+	req.SetConnectionClose()
 
 	resp := fasthttp.AcquireResponse()
 	defer fasthttp.ReleaseResponse(resp)
