@@ -93,3 +93,6 @@ The verbose output will be format in JSON format with some additional headers, s
 {"site":"http://google.com","status_code":301,"server":"gws","content_type":"text/html; charset=UTF-8","location":"http://www.google.com/"}
 {"site":"https://google.com","status_code":301,"server":"gws","content_type":"text/html; charset=UTF-8","location":"https://www.google.com/"}
 ```
+
+## Credit
+This tool get the idea and some line of codes from httprobe from @tomnomnom.
