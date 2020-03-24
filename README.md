@@ -10,6 +10,7 @@ GO111MODULE=on go get -u github.com/theblackturtle/fprobe
 - Take a list of domains/subdomains and probe for working http/https server.
 - Optimize RAM and CPU in runtime.
 - Support special ports for each domain
+- Verbose in JSON format with some addition headers, such as: `Status Code`, `Content Type`, `Location`.
  
 ## Usage
 ```
