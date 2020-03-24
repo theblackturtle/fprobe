@@ -18,12 +18,13 @@ Usage of fprobe:
         Concurrency (default 50)
   -i string
         Input file (default is stdin) (default "-")
-  -l    Use ports in the same line (google.com,2087,2086,80,443)
+  -l    Use ports in the same line (google.com,2087,2086)
   -p value
         add additional probe (proto:port)
   -s    skip the default probes (http:80 and https:443)
   -t int
         Timeout (seconds) (default 9)
+  -v    Turn on verbose
 ```
 
 ### Basic Usage
@@ -80,4 +81,14 @@ sport.yahoo.com,2086,443,2096,2053,8080,2082,80,2083,8443,2052,2087,2095,8880
 If you don't want to probe for HTTP on port 80 or HTTPS on port 443, you can use the `-s` flag.
 ```
 ❯ cat domains.txt | fprobe -s
+```
+
+### Verbose
+The verbose output will be format in JSON format with some addition headers, such as: `Status Code`, `Content Type`, `Location`.
+```
+❯ cat domains.txt | fprobe -v
+```
+```
+{"site":"http://google.com","status_code":301,"server":"gws","content_type":"text/html; charset=UTF-8","location":"http://www.google.com/"}
+{"site":"https://google.com","status_code":301,"server":"gws","content_type":"text/html; charset=UTF-8","location":"https://www.google.com/"}
 ```

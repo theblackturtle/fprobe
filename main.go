@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"github.com/json-iterator/go"
 	"github.com/panjf2000/ants"
 	"github.com/valyala/fasthttp"
 	"net"
@@ -37,6 +38,14 @@ func (p probeArgs) String() string {
 	return strings.Join(p, ",")
 }
 
+type verboseStruct struct {
+	Site        string `json:"site"`
+	StatusCode  int    `json:"status_code"`
+	Server      string `json:"server"`
+	ContentType string `json:"content_type"`
+	Location    string `json:"location"`
+}
+
 func main() {
 	// Threads
 	var concurrency int
@@ -60,6 +69,9 @@ func main() {
 
 	var sameLinePorts bool
 	flag.BoolVar(&sameLinePorts, "l", false, "Use ports in the same line (google.com,2087,2086)")
+
+	var verbose bool
+	flag.BoolVar(&verbose, "v", false, "Turn on verbose")
 	flag.Parse()
 
 	timeout = time.Duration(to) * time.Second
@@ -69,8 +81,14 @@ func main() {
 	pool, _ := ants.NewPoolWithFunc(concurrency, func(i interface{}) {
 		defer wg.Done()
 		u := i.(string)
-		if success, _ := isWorking(u); success {
-			fmt.Println(u)
+		if success, v, _ := isWorking(u, verbose); success {
+			if !verbose {
+				fmt.Println(u)
+			} else {
+				if vj, err := jsoniter.MarshalToString(v); err == nil {
+					fmt.Println(vj)
+				}
+			}
 		}
 	}, ants.WithPreAlloc(true))
 	defer pool.Release()
@@ -172,7 +190,8 @@ func initClient() {
 	}
 }
 
-func isWorking(url string) (bool, error) {
+func isWorking(url string, verbose bool) (bool, *verboseStruct, error) {
+	var v *verboseStruct
 	req := fasthttp.AcquireRequest()
 	defer fasthttp.ReleaseRequest(req)
 	req.SetRequestURI(url)
@@ -184,10 +203,21 @@ func isWorking(url string) (bool, error) {
 
 	err := doRequestTimeout(req, resp)
 	if err != nil {
-		return false, err
+		return false, v, err
 	}
-
-	return true, nil
+	if verbose {
+		server := resp.Header.Peek(fasthttp.HeaderServer)
+		contentType := resp.Header.Peek(fasthttp.HeaderContentType)
+		location := resp.Header.Peek(fasthttp.HeaderLocation)
+		v = &verboseStruct{
+			Site:        url,
+			StatusCode:  resp.StatusCode(),
+			Server:      string(server),
+			ContentType: string(contentType),
+			Location:    string(location),
+		}
+	}
+	return true, v, nil
 }
 
 func doRequestTimeout(req *fasthttp.Request, resp *fasthttp.Response) (err error) {
