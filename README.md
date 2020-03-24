@@ -10,7 +10,7 @@ GO111MODULE=on go get -u github.com/theblackturtle/fprobe
 - Take a list of domains/subdomains and probe for working http/https server.
 - Optimize RAM and CPU in runtime.
 - Support special ports for each domain
-- Verbose in JSON format with some addition headers, such as: `Status Code`, `Content Type`, `Location`.
+- Verbose in JSON format with some additional headers, such as `Status Code`, `Content Type`, `Location`.
  
 ## Usage
 ```
@@ -85,7 +85,7 @@ If you don't want to probe for HTTP on port 80 or HTTPS on port 443, you can use
 ```
 
 ### Verbose
-The verbose output will be format in JSON format with some addition headers, such as: `Status Code`, `Content Type`, `Location`.
+The verbose output will be format in JSON format with some additional headers, such as `Status Code`, `Content Type`, `Location`.
 ```
 ❯ cat domains.txt | fprobe -v
 ```
