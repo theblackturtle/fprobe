@@ -95,4 +95,4 @@ The verbose output will be format in JSON format with some additional headers, s
 ```
 
 ## Credit
-This tool get the idea and some line of codes from httprobe from @tomnomnom.
+This tool get the idea and some line of codes from `httprobe` written by @tomnomnom.
