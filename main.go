@@ -10,6 +10,7 @@ import (
 	"github.com/valyala/fasthttp"
 	"net"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -20,6 +21,7 @@ const AUTHOR = "@thebl4ckturtle - github.com/theblackturtle"
 var (
 	client    *fasthttp.Client
 	errorPool sync.Pool
+	urlRegex = regexp.MustCompile(`^(http|ws)s?://`)
 
 	timeout    time.Duration
 	portMedium = []string{"8000", "8080", "8443"}
@@ -117,6 +119,12 @@ func main() {
 			break
 		}
 		if domain == "" {
+			continue
+		}
+
+		if urlRegex.MatchString(domain){
+			wg.Add(1)
+			_ = pool.Invoke(domain)
 			continue
 		}
 

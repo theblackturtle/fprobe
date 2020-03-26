@@ -69,6 +69,13 @@ sport.yahoo.com,2086,443,2096,2053,8080,2082,80,2083,8443,2052,2087,2095,8880
 ❯ cat domains.txt | fprobe -p http:8080 -p https:8443
 ```
 
+### Use to check working urls
+```
+❯ echo 'https://google.com/path1?param=1' | fprobe
+
+https://google.com/path1?param=1
+```
+
 ### Use the built-in ports collection (Include 80, 443 by default)
 - Medium: 8000, 8080, 8443
 - Large: 81, 591, 2082, 2087, 2095, 2096, 3000, 8000, 8001, 8008, 8080, 8083, 8443, 8834, 8888
