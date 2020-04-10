@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"github.com/3th1nk/cidr"
 	"github.com/json-iterator/go"
 	"github.com/panjf2000/ants"
 	"github.com/valyala/fasthttp"
@@ -21,7 +22,7 @@ const AUTHOR = "@thebl4ckturtle - github.com/theblackturtle"
 var (
 	client    *fasthttp.Client
 	errorPool sync.Pool
-	urlRegex = regexp.MustCompile(`^(http|ws)s?://`)
+	urlRegex  = regexp.MustCompile(`^(http|ws)s?://`)
 
 	timeout    time.Duration
 	portMedium = []string{"8000", "8080", "8443"}
@@ -72,6 +73,9 @@ func main() {
 	var sameLinePorts bool
 	flag.BoolVar(&sameLinePorts, "l", false, "Use ports in the same line (google.com,2087,2086)")
 
+	var cidrInput bool
+	flag.BoolVar(&cidrInput, "cidr", false, "Generate IP addresses from CIDR")
+
 	var verbose bool
 	flag.BoolVar(&verbose, "v", false, "Turn on verbose")
 	flag.Parse()
@@ -80,7 +84,7 @@ func main() {
 	initClient()
 
 	var wg sync.WaitGroup
-	pool, _ := ants.NewPoolWithFunc(concurrency, func(i interface{}) {
+	pool, _ := ants.NewPoolWithFuncPreMalloc(concurrency, func(i interface{}) {
 		defer wg.Done()
 		u := i.(string)
 		if success, v, _ := isWorking(u, verbose); success {
@@ -92,7 +96,7 @@ func main() {
 				}
 			}
 		}
-	}, ants.WithPreAlloc(true))
+	})
 	defer pool.Release()
 
 	var sc *bufio.Scanner
@@ -113,23 +117,34 @@ func main() {
 	}
 
 	for sc.Scan() {
-		domain := strings.TrimSpace(sc.Text())
+		line := strings.TrimSpace(sc.Text())
 		if err := sc.Err(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error reading input file: %s\n", err)
 			break
 		}
-		if domain == "" {
+		if line == "" {
 			continue
 		}
 
-		if urlRegex.MatchString(domain){
-			wg.Add(1)
-			_ = pool.Invoke(domain)
+		if cidrInput {
+			c, err := cidr.ParseCIDR(line)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to parse input as CIDR: %s\n", err)
+				continue
+			}
+			if err := c.ForEachIP(func(ip string) error {
+				wg.Add(2)
+				_ = pool.Invoke("http://" + ip)
+				_ = pool.Invoke("https://" + ip)
+				return nil
+			}); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to parse input as CIDR: %s\n", err)
+			}
 			continue
 		}
 
 		if sameLinePorts {
-			lineArgs := strings.Split(domain, ",")
+			lineArgs := strings.Split(line, ",")
 			if len(lineArgs) < 2 {
 				continue
 			}
@@ -144,10 +159,16 @@ func main() {
 			continue
 		}
 
+		if urlRegex.MatchString(line) {
+			wg.Add(1)
+			_ = pool.Invoke(line)
+			continue
+		}
+
 		if !skipDefault {
 			wg.Add(2)
-			_ = pool.Invoke("http://" + domain)
-			_ = pool.Invoke("https://" + domain)
+			_ = pool.Invoke("http://" + line)
+			_ = pool.Invoke("https://" + line)
 		}
 
 		for _, p := range probes {
@@ -155,20 +176,20 @@ func main() {
 			case "medium":
 				for _, port := range portMedium {
 					wg.Add(2)
-					_ = pool.Invoke(fmt.Sprintf("http://%s:%s", domain, port))
-					_ = pool.Invoke(fmt.Sprintf("https://%s:%s", domain, port))
+					_ = pool.Invoke(fmt.Sprintf("http://%s:%s", line, port))
+					_ = pool.Invoke(fmt.Sprintf("https://%s:%s", line, port))
 				}
 			case "large":
 				for _, port := range portLarge {
 					wg.Add(2)
-					_ = pool.Invoke(fmt.Sprintf("http://%s:%s", domain, port))
-					_ = pool.Invoke(fmt.Sprintf("https://%s:%s", domain, port))
+					_ = pool.Invoke(fmt.Sprintf("http://%s:%s", line, port))
+					_ = pool.Invoke(fmt.Sprintf("https://%s:%s", line, port))
 				}
 			case "xlarge":
 				for _, port := range portXlarge {
 					wg.Add(2)
-					_ = pool.Invoke(fmt.Sprintf("http://%s:%s", domain, port))
-					_ = pool.Invoke(fmt.Sprintf("https://%s:%s", domain, port))
+					_ = pool.Invoke(fmt.Sprintf("http://%s:%s", line, port))
+					_ = pool.Invoke(fmt.Sprintf("https://%s:%s", line, port))
 				}
 			default:
 				pair := strings.SplitN(p, ":", 2)
@@ -176,7 +197,7 @@ func main() {
 					continue
 				}
 				wg.Add(1)
-				_ = pool.Invoke(fmt.Sprintf("%s://%s:%s", pair[0], domain, pair[1]))
+				_ = pool.Invoke(fmt.Sprintf("%s://%s:%s", pair[0], line, pair[1]))
 			}
 		}
 	}
