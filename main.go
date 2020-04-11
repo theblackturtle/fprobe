@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"github.com/3th1nk/cidr"
 	"github.com/json-iterator/go"
-	"github.com/panjf2000/ants"
+	"github.com/panjf2000/ants/v2"
 	"github.com/valyala/fasthttp"
 	"net"
 	"os"
@@ -84,7 +84,7 @@ func main() {
 	initClient()
 
 	var wg sync.WaitGroup
-	pool, _ := ants.NewPoolWithFuncPreMalloc(concurrency, func(i interface{}) {
+	pool, _ := ants.NewPoolWithFunc(concurrency, func(i interface{}) {
 		defer wg.Done()
 		u := i.(string)
 		if success, v, _ := isWorking(u, verbose); success {
@@ -96,7 +96,7 @@ func main() {
 				}
 			}
 		}
-	})
+	},ants.WithPreAlloc(true))
 	defer pool.Release()
 
 	var sc *bufio.Scanner
