@@ -50,6 +50,22 @@ type verboseStruct struct {
     Location    string `json:"location"`
 }
 
+func init() {
+    client = &fasthttp.Client{
+        NoDefaultUserAgentHeader: true,
+        Dial: func(addr string) (net.Conn, error) {
+            return fasthttp.DialTimeout(addr, 5*time.Second) // Default is 3 seconds
+        },
+        TLSConfig: &tls.Config{
+            InsecureSkipVerify: true,
+            Renegotiation:      tls.RenegotiateOnceAsClient, // For "local error: tls: no renegotiation"
+        },
+        // This also limits the maximum header size.
+        ReadBufferSize:  28 * 1024,
+        WriteBufferSize: 28 * 1024,
+    }
+}
+
 func main() {
     // Threads
     var concurrency int
@@ -82,7 +98,6 @@ func main() {
     flag.Parse()
 
     timeout = time.Duration(to) * time.Second
-    initClient()
 
     var wg sync.WaitGroup
     pool, _ := ants.NewPoolWithFunc(concurrency, func(i interface{}) {
@@ -203,22 +218,6 @@ func main() {
         }
     }
     wg.Wait()
-}
-
-func initClient() {
-    client = &fasthttp.Client{
-        NoDefaultUserAgentHeader: true,
-        Dial: func(addr string) (net.Conn, error) {
-            return fasthttp.DialTimeout(addr, timeout)
-        },
-        TLSConfig: &tls.Config{
-            InsecureSkipVerify: true,
-            Renegotiation:      tls.RenegotiateOnceAsClient, // For "local error: tls: no renegotiation"
-        },
-        // This also limits the maximum header size.
-        ReadBufferSize:  28 * 1024,
-        WriteBufferSize: 28 * 1024,
-    }
 }
 
 func isWorking(url string, verbose bool) (bool, *verboseStruct, error) {
