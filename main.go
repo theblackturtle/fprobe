@@ -22,7 +22,6 @@ const AUTHOR = "@thebl4ckturtle - github.com/theblackturtle"
 
 var (
     client    *fasthttp.Client
-    errorPool sync.Pool
     urlRegex  = regexp.MustCompile(`^(http|ws)s?://`)
 
     timeout    time.Duration
@@ -54,7 +53,7 @@ func init() {
     client = &fasthttp.Client{
         NoDefaultUserAgentHeader: true,
         Dial: func(addr string) (net.Conn, error) {
-            return fasthttp.DialTimeout(addr, time.Minute) // Default of net/http is 3 minutes
+            return fasthttp.DialTimeout(addr, 2*time.Minute) // Default of net/http is 3 minutes
         },
         TLSConfig: &tls.Config{
             InsecureSkipVerify: true,
@@ -231,7 +230,7 @@ func isWorking(url string, verbose bool) (bool, *verboseStruct, error) {
     defer fasthttp.ReleaseResponse(resp)
     resp.SkipBody = true
 
-    err := doRequestTimeout(req, resp)
+    err := client.DoTimeout(req, resp, timeout)
     if err != nil {
         return false, v, err
     }
@@ -248,28 +247,4 @@ func isWorking(url string, verbose bool) (bool, *verboseStruct, error) {
         }
     }
     return true, v, nil
-}
-
-func doRequestTimeout(req *fasthttp.Request, resp *fasthttp.Response) (err error) {
-    var ch chan error
-    chv := errorPool.Get()
-    if chv == nil {
-        chv = make(chan error, 1)
-    }
-    ch = chv.(chan error)
-
-    go func() {
-        err := client.Do(req, resp)
-        ch <- err
-    }()
-
-    tc := fasthttp.AcquireTimer(timeout)
-    select {
-    case err = <-ch:
-        errorPool.Put(chv)
-    case <-tc.C:
-        err = fasthttp.ErrTimeout
-    }
-    fasthttp.ReleaseTimer(tc)
-    return
 }
