@@ -54,7 +54,7 @@ func init() {
     client = &fasthttp.Client{
         NoDefaultUserAgentHeader: true,
         Dial: func(addr string) (net.Conn, error) {
-            return fasthttp.DialTimeout(addr, 5*time.Second) // Default is 3 seconds
+            return fasthttp.DialTimeout(addr, time.Minute) // Default of net/http is 3 minutes
         },
         TLSConfig: &tls.Config{
             InsecureSkipVerify: true,
