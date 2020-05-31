@@ -2,6 +2,7 @@ package main
 
 import (
     "bufio"
+    "context"
     "crypto/tls"
     "flag"
     "fmt"
@@ -50,10 +51,21 @@ type verboseStruct struct {
 }
 
 func init() {
+    dialer := fasthttp.TCPDialer{
+        Concurrency: 1000,
+        Resolver: &net.Resolver{
+            PreferGo:     true,
+            StrictErrors: false,
+            Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+                d := net.Dialer{}
+                return d.DialContext(ctx, "udp", "8.8.8.8:53")
+            },
+        },
+    }
     client = &fasthttp.Client{
         NoDefaultUserAgentHeader: true,
         Dial: func(addr string) (net.Conn, error) {
-            return fasthttp.DialDualStackTimeout(addr, 30*time.Second)
+            return dialer.DialDualStackTimeout(addr, 30*time.Second)
         },
         TLSConfig: &tls.Config{
             InsecureSkipVerify: true,
