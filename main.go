@@ -105,6 +105,10 @@ func main() {
     var cidrInput bool
     flag.BoolVar(&cidrInput, "cidr", false, "Generate IP addresses from CIDR")
 
+    // Get an idea from httprobe written by @tomnomnom
+    var preferHTTPS bool
+    flag.BoolVar(&preferHTTPS, "prefer-https", false, "only try plain HTTP if HTTPS fails")
+
     var verbose bool
     flag.BoolVar(&verbose, "v", false, "Turn on verbose")
     flag.Parse()
@@ -112,12 +116,13 @@ func main() {
     timeout = time.Duration(to) * time.Second
 
     var wg sync.WaitGroup
-    pool, _ := ants.NewPoolWithFunc(concurrency, func(i interface{}) {
+    httpPool, _ := ants.NewPoolWithFunc(concurrency/2, func(i interface{}) {
         defer wg.Done()
         u := i.(string)
-        if success, v, _ := isWorking(u, verbose); success {
+        urlWithScheme := "http://" + u
+        if success, v, _ := isWorking(urlWithScheme, verbose); success {
             if !verbose {
-                fmt.Println(u)
+                fmt.Println(urlWithScheme)
             } else {
                 if vj, err := jsoniter.MarshalToString(v); err == nil {
                     fmt.Println(vj)
@@ -125,7 +130,29 @@ func main() {
             }
         }
     }, ants.WithPreAlloc(true))
-    defer pool.Release()
+    defer httpPool.Release()
+
+    httpsPool, _ := ants.NewPoolWithFunc(concurrency/2, func(i interface{}) {
+        defer wg.Done()
+        u := i.(string)
+        urlWithScheme := "https://" + u
+        if success, v, _ := isWorking(urlWithScheme, verbose); success {
+            if !verbose {
+                fmt.Println(urlWithScheme)
+            } else {
+                if vj, err := jsoniter.MarshalToString(v); err == nil {
+                    fmt.Println(vj)
+                }
+            }
+
+            if preferHTTPS {
+                return
+            }
+            wg.Add(1)
+            httpPool.Invoke(u)
+        }
+    }, ants.WithPreAlloc(true))
+    defer httpsPool.Release()
 
     var sc *bufio.Scanner
     if inputFile == "" {
@@ -161,9 +188,8 @@ func main() {
                 continue
             }
             if err := c.ForEachIP(func(ip string) error {
-                wg.Add(2)
-                _ = pool.Invoke("http://" + ip)
-                _ = pool.Invoke("https://" + ip)
+                wg.Add(1)
+                _ = httpsPool.Invoke(ip)
                 return nil
             }); err != nil {
                 fmt.Fprintf(os.Stderr, "Failed to parse input as CIDR: %s\n", err)
@@ -179,9 +205,8 @@ func main() {
             d, ports := lineArgs[0], lineArgs[1:]
             for _, port := range ports {
                 if port := strings.TrimSpace(port); port != "" {
-                    wg.Add(2)
-                    _ = pool.Invoke(fmt.Sprintf("http://%s:%s", d, port))
-                    _ = pool.Invoke(fmt.Sprintf("https://%s:%s", d, port))
+                    wg.Add(1)
+                    _ = httpsPool.Invoke(fmt.Sprintf("%s:%s", d, port))
                 }
             }
             continue
@@ -189,35 +214,35 @@ func main() {
 
         if urlRegex.MatchString(line) {
             wg.Add(1)
-            _ = pool.Invoke(line)
+            if strings.HasPrefix(line, "http://") {
+                _ = httpPool.Invoke(strings.TrimPrefix(line, "http://"))
+            } else {
+                _ = httpsPool.Invoke(strings.TrimPrefix(line, "https://"))
+            }
             continue
         }
 
         if !skipDefault {
-            wg.Add(2)
-            _ = pool.Invoke("http://" + line)
-            _ = pool.Invoke("https://" + line)
+            wg.Add(1)
+            _ = httpsPool.Invoke(line)
         }
 
         for _, p := range probes {
             switch p {
             case "medium":
                 for _, port := range portMedium {
-                    wg.Add(2)
-                    _ = pool.Invoke(fmt.Sprintf("http://%s:%s", line, port))
-                    _ = pool.Invoke(fmt.Sprintf("https://%s:%s", line, port))
+                    wg.Add(1)
+                    _ = httpsPool.Invoke(fmt.Sprintf("%s:%s", line, port))
                 }
             case "large":
                 for _, port := range portLarge {
-                    wg.Add(2)
-                    _ = pool.Invoke(fmt.Sprintf("http://%s:%s", line, port))
-                    _ = pool.Invoke(fmt.Sprintf("https://%s:%s", line, port))
+                    wg.Add(1)
+                    _ = httpsPool.Invoke(fmt.Sprintf("%s:%s", line, port))
                 }
             case "xlarge":
                 for _, port := range portXlarge {
-                    wg.Add(2)
-                    _ = pool.Invoke(fmt.Sprintf("http://%s:%s", line, port))
-                    _ = pool.Invoke(fmt.Sprintf("https://%s:%s", line, port))
+                    wg.Add(1)
+                    _ = httpsPool.Invoke(fmt.Sprintf("%s:%s", line, port))
                 }
             default:
                 pair := strings.SplitN(p, ":", 2)
@@ -225,7 +250,11 @@ func main() {
                     continue
                 }
                 wg.Add(1)
-                _ = pool.Invoke(fmt.Sprintf("%s://%s:%s", pair[0], line, pair[1]))
+                if pair[0] == "http" {
+                    _ = httpPool.Invoke(fmt.Sprintf("%s:%s", line, pair[1]))
+                } else {
+                    _ = httpsPool.Invoke(fmt.Sprintf("%s:%s", line, pair[1]))
+                }
             }
         }
     }
