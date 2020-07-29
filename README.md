@@ -24,6 +24,8 @@ Usage of fprobe:
   -l    Use ports in the same line (google.com,2087,2086)
   -p value
         add additional probe (proto:port)
+  -prefer-https
+        only try plain HTTP if HTTPS fails
   -s    skip the default probes (http:80 and https:443)
   -t int
         Timeout (seconds) (default 9)
