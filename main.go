@@ -2,7 +2,6 @@ package main
 
 import (
     "bufio"
-    "context"
     "crypto/tls"
     "flag"
     "fmt"
@@ -22,8 +21,8 @@ import (
 const AUTHOR = "@thebl4ckturtle - github.com/theblackturtle"
 
 var (
-    client    *fasthttp.Client
-    urlRegex  = regexp.MustCompile(`^(http|ws)s?://`)
+    client   *fasthttp.Client
+    urlRegex = regexp.MustCompile(`^(http|ws)s?://`)
 
     timeout    time.Duration
     portMedium = []string{"8000", "8080", "8443"}
@@ -51,21 +50,10 @@ type verboseStruct struct {
 }
 
 func init() {
-    dialer := fasthttp.TCPDialer{
-        Concurrency: 1000,
-        Resolver: &net.Resolver{
-            PreferGo:     true,
-            StrictErrors: false,
-            Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-                d := net.Dialer{}
-                return d.DialContext(ctx, "udp", "8.8.8.8:53")
-            },
-        },
-    }
     client = &fasthttp.Client{
         NoDefaultUserAgentHeader: true,
         Dial: func(addr string) (net.Conn, error) {
-            return dialer.DialDualStackTimeout(addr, 30*time.Second)
+            return fasthttp.DialDualStackTimeout(addr, 30*time.Second)
         },
         TLSConfig: &tls.Config{
             InsecureSkipVerify: true,
@@ -111,6 +99,9 @@ func main() {
 
     var verbose bool
     flag.BoolVar(&verbose, "v", false, "Turn on verbose")
+
+    var debug bool
+    flag.BoolVar(&debug, "d", false, "Turn on debug")
     flag.Parse()
 
     timeout = time.Duration(to) * time.Second
@@ -120,6 +111,9 @@ func main() {
         defer wg.Done()
         u := i.(string)
         urlWithScheme := "http://" + u
+        if debug {
+            fmt.Fprintf(os.Stderr, "[DEBUG] %s\n", urlWithScheme)
+        }
         if success, v, _ := isWorking(urlWithScheme, verbose); success {
             if !verbose {
                 fmt.Println(urlWithScheme)
@@ -136,6 +130,9 @@ func main() {
         defer wg.Done()
         u := i.(string)
         urlWithScheme := "https://" + u
+        if debug {
+            fmt.Fprintf(os.Stderr, "[DEBUG] %s\n", urlWithScheme)
+        }
         if success, v, _ := isWorking(urlWithScheme, verbose); success {
             if !verbose {
                 fmt.Println(urlWithScheme)
@@ -144,13 +141,12 @@ func main() {
                     fmt.Println(vj)
                 }
             }
-
             if preferHTTPS {
                 return
             }
-            wg.Add(1)
-            httpPool.Invoke(u)
         }
+        wg.Add(1)
+        httpPool.Invoke(u)
     }, ants.WithPreAlloc(true))
     defer httpsPool.Release()
 
