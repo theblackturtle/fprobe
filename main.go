@@ -2,12 +2,14 @@ package main
 
 import (
     "bufio"
+    "crypto/sha1"
     "crypto/tls"
     "flag"
     "fmt"
     "net"
     "os"
     "regexp"
+    "sort"
     "strings"
     "sync"
     "time"
@@ -21,10 +23,11 @@ import (
 const AUTHOR = "@thebl4ckturtle - github.com/theblackturtle"
 
 var (
-    client   *fasthttp.Client
-    urlRegex = regexp.MustCompile(`^(http|ws)s?://`)
+    client          *fasthttp.Client
+    similarDetector *Similar
+    timeout         time.Duration
+    urlRegex        = regexp.MustCompile(`^(http|ws)s?://`)
 
-    timeout    time.Duration
     portMedium = []string{"8000", "8080", "8443"}
     portLarge  = []string{"81", "591", "2082", "2087", "2095", "2096", "3000", "8000", "8001", "8008", "8080", "8083", "8443", "8834", "8888"}
     portXlarge = []string{"81", "300", "591", "593", "832", "981", "1010", "1311", "2082", "2087", "2095", "2096", "2480", "3000", "3128", "3333", "4243", "4567", "4711", "4712", "4993", "5000", "5104", "5108", "5800", "6543", "7000", "7396", "7474", "8000", "8001", "8008", "8014", "8042", "8069", "8080", "8081", "8088", "8090", "8091", "8118", "8123", "8172", "8222", "8243", "8280", "8281", "8333", "8443", "8500", "8834", "8880", "8888", "8983", "9000", "9043", "9060", "9080", "9090", "9091", "9200", "9443", "9800", "9981", "12443", "16080", "18091", "18092", "20720", "28017"}
@@ -95,7 +98,10 @@ func main() {
 
     // Get an idea from httprobe written by @tomnomnom
     var preferHTTPS bool
-    flag.BoolVar(&preferHTTPS, "prefer-https", false, "only try plain HTTP if HTTPS fails")
+    flag.BoolVar(&preferHTTPS, "prefer-https", false, "oOnly try plain HTTP if HTTPS fails")
+
+    var detectSimilarSites bool
+    flag.BoolVar(&detectSimilarSites, "detect-similar", false, "Detect similar sites (careful when using this, this just using headers and cookies to generation hash)")
 
     var verbose bool
     flag.BoolVar(&verbose, "v", false, "Turn on verbose")
@@ -105,22 +111,27 @@ func main() {
     flag.Parse()
 
     timeout = time.Duration(to) * time.Second
+    if detectSimilarSites {
+        similarDetector = NewSimilar()
+    }
 
     var wg sync.WaitGroup
     httpPool, _ := ants.NewPoolWithFunc(concurrency/2, func(i interface{}) {
         defer wg.Done()
         u := i.(string)
         urlWithScheme := "http://" + u
-        if debug {
-            fmt.Fprintf(os.Stderr, "[DEBUG] %s\n", urlWithScheme)
-        }
-        if success, v, _ := isWorking(urlWithScheme, verbose); success {
+        success, v, err := isWorking(urlWithScheme, verbose)
+        if success {
             if !verbose {
                 fmt.Println(urlWithScheme)
             } else {
                 if vj, err := jsoniter.MarshalToString(v); err == nil {
                     fmt.Println(vj)
                 }
+            }
+        } else {
+            if debug {
+                fmt.Fprintf(os.Stderr, "[DEBUG] %s: %s\n", urlWithScheme, err)
             }
         }
     }, ants.WithPreAlloc(true))
@@ -130,10 +141,8 @@ func main() {
         defer wg.Done()
         u := i.(string)
         urlWithScheme := "https://" + u
-        if debug {
-            fmt.Fprintf(os.Stderr, "[DEBUG] %s\n", urlWithScheme)
-        }
-        if success, v, _ := isWorking(urlWithScheme, verbose); success {
+        success, v, err := isWorking(urlWithScheme, verbose)
+        if success {
             if !verbose {
                 fmt.Println(urlWithScheme)
             } else {
@@ -143,6 +152,10 @@ func main() {
             }
             if preferHTTPS {
                 return
+            }
+        } else {
+            if debug {
+                fmt.Fprintf(os.Stderr, "[DEBUG] %s: %s\n", urlWithScheme, err)
             }
         }
         wg.Add(1)
@@ -272,6 +285,26 @@ func isWorking(url string, verbose bool) (bool, *verboseStruct, error) {
     if err != nil {
         return false, v, err
     }
+
+    if similarDetector != nil {
+        var headers []string
+        resp.Header.VisitAll(func(key, _ []byte) {
+            headers = append(headers, string(key))
+        })
+        sort.Strings(headers)
+
+        var cookies []string
+        resp.Header.VisitAllCookie(func(key, _ []byte) {
+            cookies = append(cookies, string(key))
+        })
+        sort.Strings(cookies)
+        hash := getHash(headers, cookies)
+        // Return if this site's hash exists
+        if !similarDetector.Add(hash) {
+            return false, v, fmt.Errorf("similar another site")
+        }
+    }
+
     if verbose {
         server := resp.Header.Peek(fasthttp.HeaderServer)
         contentType := resp.Header.Peek(fasthttp.HeaderContentType)
@@ -285,4 +318,12 @@ func isWorking(url string, verbose bool) (bool, *verboseStruct, error) {
         }
     }
     return true, v, nil
+}
+
+func getHash(headers, cookies []string) string {
+    headerHash := strings.Join(headers, ",")
+    cookieHash := strings.Join(cookies, ",")
+    hash := fmt.Sprintf("%s,%s", headerHash, cookieHash)
+    checksum := sha1.Sum([]byte(hash))
+    return fmt.Sprintf("%x", checksum)
 }
