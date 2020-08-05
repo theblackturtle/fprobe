@@ -108,6 +108,11 @@ func main() {
 
     var debug bool
     flag.BoolVar(&debug, "d", false, "Turn on debug")
+
+    flag.Usage = func() {
+        fmt.Fprintf(os.Stderr, "AUTHOR: @thebl4ckturtle - github.com/theblackturtle\n\nUsage of fprobe:\n")
+        flag.PrintDefaults()
+    }
     flag.Parse()
 
     timeout = time.Duration(to) * time.Second
