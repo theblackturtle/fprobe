@@ -20,8 +20,6 @@ import (
     "github.com/valyala/fasthttp"
 )
 
-const AUTHOR = "@thebl4ckturtle - github.com/theblackturtle"
-
 var (
     client          *fasthttp.Client
     similarDetector *Similar
@@ -52,11 +50,20 @@ type verboseStruct struct {
     Location    string `json:"location"`
 }
 
+type Task struct {
+    Scheme string
+    Url    string
+}
+
+func (t *Task) String() string {
+    return fmt.Sprintf("%s://%s", t.Scheme, t.Url)
+}
+
 func init() {
     client = &fasthttp.Client{
         NoDefaultUserAgentHeader: true,
         Dial: func(addr string) (net.Conn, error) {
-            return fasthttp.DialDualStackTimeout(addr, 30*time.Second)
+            return fasthttp.DialDualStackTimeout(addr, time.Second*60)
         },
         TLSConfig: &tls.Config{
             InsecureSkipVerify: true,
@@ -121,52 +128,39 @@ func main() {
     }
 
     var wg sync.WaitGroup
-    httpPool, _ := ants.NewPoolWithFunc(concurrency/2, func(i interface{}) {
+    var workingPool *ants.PoolWithFunc
+    workingPool, err := ants.NewPoolWithFunc(concurrency, func(i interface{}) {
         defer wg.Done()
-        u := i.(string)
-        urlWithScheme := "http://" + u
-        success, v, err := isWorking(urlWithScheme, verbose)
+        t := i.(Task)
+        success, v, err := isWorking(t.String(), verbose)
         if success {
             if !verbose {
-                fmt.Println(urlWithScheme)
+                fmt.Println(t.String())
             } else {
                 if vj, err := jsoniter.MarshalToString(v); err == nil {
                     fmt.Println(vj)
                 }
             }
-        } else {
-            if debug {
-                fmt.Fprintf(os.Stderr, "[DEBUG] %s: %s\n", urlWithScheme, err)
-            }
-        }
-    }, ants.WithPreAlloc(true))
-    defer httpPool.Release()
-
-    httpsPool, _ := ants.NewPoolWithFunc(concurrency/2, func(i interface{}) {
-        defer wg.Done()
-        u := i.(string)
-        urlWithScheme := "https://" + u
-        success, v, err := isWorking(urlWithScheme, verbose)
-        if success {
-            if !verbose {
-                fmt.Println(urlWithScheme)
-            } else {
-                if vj, err := jsoniter.MarshalToString(v); err == nil {
-                    fmt.Println(vj)
-                }
-            }
-            if preferHTTPS {
+            if (preferHTTPS && t.Scheme == "https") || t.Scheme == "http" {
                 return
             }
+            wg.Add(1)
+            workingPool.Invoke(Task{
+                Scheme: "http",
+                Url:    t.Url,
+            })
         } else {
             if debug {
-                fmt.Fprintf(os.Stderr, "[DEBUG] %s: %s\n", urlWithScheme, err)
+                fmt.Fprintf(os.Stderr, "[DEBUG] %s: %s\n", t.String(), err)
             }
         }
-        wg.Add(1)
-        httpPool.Invoke(u)
+
     }, ants.WithPreAlloc(true))
-    defer httpsPool.Release()
+    if err != nil {
+        fmt.Println("Failed to create working pool")
+        os.Exit(1)
+    }
+    defer workingPool.Release()
 
     var sc *bufio.Scanner
     if inputFile == "" {
@@ -203,7 +197,10 @@ func main() {
             }
             if err := c.ForEachIP(func(ip string) error {
                 wg.Add(1)
-                _ = httpsPool.Invoke(ip)
+                _ = workingPool.Invoke(Task{
+                    Scheme: "https",
+                    Url:    ip,
+                })
                 return nil
             }); err != nil {
                 fmt.Fprintf(os.Stderr, "Failed to parse input as CIDR: %s\n", err)
@@ -220,7 +217,10 @@ func main() {
             for _, port := range ports {
                 if port := strings.TrimSpace(port); port != "" {
                     wg.Add(1)
-                    _ = httpsPool.Invoke(fmt.Sprintf("%s:%s", d, port))
+                    _ = workingPool.Invoke(Task{
+                        Scheme: "https",
+                        Url:    fmt.Sprintf("%s:%s", d, port),
+                    })
                 }
             }
             continue
@@ -229,16 +229,25 @@ func main() {
         if urlRegex.MatchString(line) {
             wg.Add(1)
             if strings.HasPrefix(line, "http://") {
-                _ = httpPool.Invoke(strings.TrimPrefix(line, "http://"))
+                _ = workingPool.Invoke(Task{
+                    Scheme: "http",
+                    Url:    strings.TrimPrefix(line, "http://"),
+                })
             } else {
-                _ = httpsPool.Invoke(strings.TrimPrefix(line, "https://"))
+                _ = workingPool.Invoke(Task{
+                    Scheme: "https",
+                    Url:    strings.TrimPrefix(line, "http://"),
+                })
             }
             continue
         }
 
         if !skipDefault {
             wg.Add(1)
-            _ = httpsPool.Invoke(line)
+            _ = workingPool.Invoke(Task{
+                Scheme: "https",
+                Url:    line,
+            })
         }
 
         for _, p := range probes {
@@ -246,17 +255,26 @@ func main() {
             case "medium":
                 for _, port := range portMedium {
                     wg.Add(1)
-                    _ = httpsPool.Invoke(fmt.Sprintf("%s:%s", line, port))
+                    _ = workingPool.Invoke(Task{
+                        Scheme: "https",
+                        Url:    fmt.Sprintf("%s:%s", line, port),
+                    })
                 }
             case "large":
                 for _, port := range portLarge {
                     wg.Add(1)
-                    _ = httpsPool.Invoke(fmt.Sprintf("%s:%s", line, port))
+                    _ = workingPool.Invoke(Task{
+                        Scheme: "https",
+                        Url:    fmt.Sprintf("%s:%s", line, port),
+                    })
                 }
             case "xlarge":
                 for _, port := range portXlarge {
                     wg.Add(1)
-                    _ = httpsPool.Invoke(fmt.Sprintf("%s:%s", line, port))
+                    _ = workingPool.Invoke(Task{
+                        Scheme: "https",
+                        Url:    fmt.Sprintf("%s:%s", line, port),
+                    })
                 }
             default:
                 pair := strings.SplitN(p, ":", 2)
@@ -265,9 +283,15 @@ func main() {
                 }
                 wg.Add(1)
                 if pair[0] == "http" {
-                    _ = httpPool.Invoke(fmt.Sprintf("%s:%s", line, pair[1]))
+                    _ = workingPool.Invoke(Task{
+                        Scheme: "http",
+                        Url:    fmt.Sprintf("%s:%s", line, pair[1]),
+                    })
                 } else {
-                    _ = httpsPool.Invoke(fmt.Sprintf("%s:%s", line, pair[1]))
+                    _ = workingPool.Invoke(Task{
+                        Scheme: "https",
+                        Url:    fmt.Sprintf("%s:%s", line, pair[1]),
+                    })
                 }
             }
         }
