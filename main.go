@@ -63,15 +63,15 @@ func init() {
     client = &fasthttp.Client{
         NoDefaultUserAgentHeader: true,
         Dial: func(addr string) (net.Conn, error) {
-            return fasthttp.DialDualStackTimeout(addr, time.Second*60)
+            return fasthttp.DialDualStackTimeout(addr, time.Minute*3) // net/http's default is 3 minutes
         },
         TLSConfig: &tls.Config{
             InsecureSkipVerify: true,
             Renegotiation:      tls.RenegotiateOnceAsClient, // For "local error: tls: no renegotiation"
         },
         // This also limits the maximum header size.
-        ReadBufferSize:      28 * 1024,
-        WriteBufferSize:     28 * 1024,
+        ReadBufferSize:      48 * 1024,
+        WriteBufferSize:     48 * 1024,
         MaxIdleConnDuration: time.Second,
     }
 }
